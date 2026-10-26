@@ -314,6 +314,7 @@ export const Particles: React.FC<{cam: Cam3; count?: number; area: [number, numb
       const y = area[1] + r('y') * (area[3] - area[1]);
       const z = 40 + r('z') * 620;
       const s = 4 + r('s') * 10;
+      if (Math.hypot(x - cam.x, y - cam.y) > floorRadius(cam) * 1.2) return null;
       return (
         <div
           key={i}
@@ -334,35 +335,46 @@ export const Particles: React.FC<{cam: Cam3; count?: number; area: [number, numb
   </>
 );
 
-export const Floor: React.FC<{cam: Cam3}> = ({cam}) => (
-  <>
-    <div
-      style={{
-        position: 'absolute',
-        left: -1600,
-        top: -1000,
-        width: 7600,
-        height: 6400,
-        backgroundImage:
-          'linear-gradient(rgba(124,255,79,0.10) 2px, transparent 2px), linear-gradient(90deg, rgba(124,255,79,0.10) 2px, transparent 2px)',
-        backgroundSize: '160px 160px',
-        WebkitMaskImage: `radial-gradient(1500px 1500px at ${cam.x + 1600}px ${cam.y + 1000}px, #000 15%, transparent 100%)`,
-        maskImage: `radial-gradient(1500px 1500px at ${cam.x + 1600}px ${cam.y + 1000}px, #000 15%, transparent 100%)`,
-      }}
-    />
-    <div
-      style={{
-        position: 'absolute',
-        left: cam.x - 900,
-        top: cam.y - 900,
-        width: 1800,
-        height: 1800,
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(124,255,79,0.10), transparent 65%)',
-      }}
-    />
-  </>
-);
+// Raio de chão a desenhar à volta do alvo: nunca chega à posição da câmara (atrás dela o browser
+// tem de rasterizar planos enormes e o render fica parado).
+export const floorRadius = (c: Cam3) => {
+  const ground = c.d * Math.sin((c.tilt * Math.PI) / 180);
+  return c.tilt < 25 ? 2600 : Math.max(800, Math.min(2600, ground * 0.8));
+};
+
+export const Floor: React.FC<{cam: Cam3}> = ({cam}) => {
+  const R = floorRadius(cam);
+  return (
+    <>
+      <div
+        style={{
+          position: 'absolute',
+          left: cam.x - R,
+          top: cam.y - R,
+          width: 2 * R,
+          height: 2 * R,
+          backgroundImage:
+            'linear-gradient(rgba(124,255,79,0.15) 2px, transparent 2px), linear-gradient(90deg, rgba(124,255,79,0.15) 2px, transparent 2px)',
+          backgroundSize: '160px 160px',
+          backgroundPosition: `${-(cam.x - R)}px ${-(cam.y - R)}px`,
+          WebkitMaskImage: 'radial-gradient(closest-side, #000 20%, transparent 100%)',
+          maskImage: 'radial-gradient(closest-side, #000 20%, transparent 100%)',
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          left: cam.x - R * 0.7,
+          top: cam.y - R * 0.7,
+          width: R * 1.4,
+          height: R * 1.4,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(124,255,79,0.10), transparent 65%)',
+        }}
+      />
+    </>
+  );
+};
 
 // Sombra suave no chão por baixo de um objeto de pé.
 export const FloorShadow: React.FC<{x: number; y: number; w: number; o?: number}> = ({x, y, w, o = 0.6}) => (

@@ -23,6 +23,7 @@ import {
   ci,
   easeInOut,
   expoOut,
+  floorRadius,
   worldTransform,
 } from './kit';
 
@@ -425,9 +426,9 @@ const CAM3: Cam3Key[] = [
   {f: 292, x: 2330, y: 2560, z: 380, d: 1300, tilt: 85, spin: -17},
   {f: 308, x: 3100, y: 2560, z: 380, d: 1350, tilt: 84, spin: -24, roll: 3},
   {f: 314, x: 3120, y: 2560, z: 380, d: 1300, tilt: 85, spin: -17},
-  {f: 330, x: 2300, y: 2800, z: 200, d: 4600, tilt: 58, spin: 30},
-  {f: 350, x: 2300, y: 3440, z: 100, d: 1550, tilt: 78, spin: -30},
-  {f: 386, x: 2300, y: 3440, z: 100, d: 1450, tilt: 82, spin: 14},
+  {f: 330, x: 2200, y: 2520, z: 380, d: 3900, tilt: 62, spin: 26},
+  {f: 350, x: 2300, y: 3440, z: 140, d: 1550, tilt: 78, spin: -30},
+  {f: 386, x: 2300, y: 3440, z: 140, d: 1450, tilt: 82, spin: 14},
   {f: 398, x: 1500, y: 2900, z: 300, d: 3600, tilt: 45, spin: 80, roll: 8},
   {f: 412, x: 540, y: 2500, d: 1500, tilt: 20, spin: 10},
   {f: 436, x: 540, y: 2480, d: 1450, tilt: 12, spin: 0},
@@ -451,6 +452,7 @@ const Scenes: React.FC = () => {
   };
   const pop = (t: number) => spring({frame: f - t, fps, config: {damping: 11, stiffness: 150}});
   const fog = ci(cam.tilt, [50, 85], [0, 1]);
+  const R = floorRadius(cam);
 
   const cards = [
     {x: 1500, c: CYAN, at: 250, title: 'AGULHA FINA', body: ['Uma só ponta:', 'o traço é delicado.'], icon: 'needle'},
@@ -516,7 +518,7 @@ const Scenes: React.FC = () => {
           ) : null}
 
           {/* Linha-guia: trilho néon no chão */}
-          <svg width={4000} height={4000} style={{position: 'absolute', inset: 0, overflow: 'visible', transform: 'translateZ(1px)'}}>
+          <svg width={2 * R} height={2 * R} viewBox={`${cam.x - R} ${cam.y - R} ${2 * R} ${2 * R}`} style={{position: 'absolute', left: cam.x - R, top: cam.y - R, transform: 'translateZ(1px)'}}>
             <GlowDefs />
             {f >= 20 && f < 31 ? <NeedleHead x={dot.x} y={dot.y} r={10} /> : null}
             <GuideSeg d="M120 1080 L960 1080" from={30} to={54} fadeAt={98} />
@@ -588,13 +590,11 @@ const Scenes: React.FC = () => {
           {f > 340 && f < 406 ? (
             <>
               <FloorShadow x={2300} y={3450} w={1200} o={0.5 * reRise * reOut} />
-              <Stand x={2300} y={3436} w={1600} h={170} rise={reRise}>
-                <div style={{position: 'absolute', top: 10, left: 0, right: 0, textAlign: 'center', transformStyle: 'preserve-3d'}}>
+              <Stand x={2300} y={3436} w={1600} h={260} rise={reRise}>
+                <div style={{position: 'absolute', top: 0, left: 0, right: 0, textAlign: 'center', transformStyle: 'preserve-3d'}}>
                   <Extrude text="O RETOQUE." style={txt(150, 900, {letterSpacing: -2})} depth={16} clip={clipCenter(reP)} opacity={reOut} />
                 </div>
-              </Stand>
-              <Stand x={2300} y={3540} w={1400} h={60} rise={ci(f, [358, 370], [0, 1], expoOut)}>
-                <div style={{textAlign: 'center', ...txt(46, 800, {letterSpacing: 8, color: '#E8F3EE'}), clipPath: clipLeft(ci(f, [360, 378], [0, 1])), opacity: reOut}}>
+                <div style={{position: 'absolute', top: 190, left: 0, right: 0, textAlign: 'center', ...txt(46, 800, {letterSpacing: 8, color: '#E8F3EE'}), clipPath: clipLeft(ci(f, [360, 378], [0, 1])), opacity: reOut}}>
                   FAZ PARTE DO PROCESSO.
                 </div>
               </Stand>
@@ -762,7 +762,7 @@ const Sound: React.FC = () => (
 
 export const TracoFino: React.FC = () => (
   <AbsoluteFill style={{background: BG}}>
-    <CameraMotionBlur samples={6} shutterAngle={170}>
+    <CameraMotionBlur samples={5} shutterAngle={170}>
       <Remapped />
     </CameraMotionBlur>
     <Sound />
