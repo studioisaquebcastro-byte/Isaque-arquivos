@@ -6,19 +6,24 @@ import {CameraMotionBlur} from '@remotion/motion-blur';
 import {getLength, getPointAtLength} from '@remotion/paths';
 import {
   BG,
-  CamKey,
+  Cam3Key,
+  Extrude,
   FONT,
-  GlassCard,
+  Floor,
+  FloorShadow,
   GlowDefs,
   GuideSeg,
   NEON,
   NeedleHead,
   Odometer,
-  Reveal,
-  cameraAt,
+  PERSPECTIVE,
+  Particles,
+  Stand,
+  cam3At,
   ci,
   easeInOut,
   expoOut,
+  worldTransform,
 } from './kit';
 
 const W = 1080;
@@ -27,30 +32,6 @@ const RED = '#FF4D5E';
 const CYAN = '#3FD0FF';
 const PURPLE = '#A77BFF';
 const AMBER = '#FFB547';
-
-// ---------- Câmara ----------
-const CAM: CamKey[] = [
-  {f: 0, x: 540, y: 960, s: 1.25},
-  {f: 30, x: 540, y: 980, s: 1},
-  {f: 86, x: 540, y: 1000, s: 1.06},
-  {f: 104, x: 640, y: 1750, s: 0.9, rx: 14},
-  {f: 122, x: 540, y: 2480, s: 1.02},
-  {f: 165, x: 540, y: 2480, s: 1.07},
-  {f: 184, x: 540, y: 2360, s: 0.86},
-  {f: 238, x: 540, y: 2380, s: 0.9},
-  {f: 260, x: 1500, y: 2500, s: 1.05, ry: -9},
-  {f: 268, x: 1530, y: 2500, s: 1.07, ry: -9},
-  {f: 284, x: 2300, y: 2500, s: 1.05, ry: -9},
-  {f: 292, x: 2330, y: 2500, s: 1.07, ry: -9},
-  {f: 308, x: 3100, y: 2500, s: 1.05, ry: -9},
-  {f: 314, x: 3120, y: 2500, s: 1.07, ry: -9},
-  {f: 330, x: 2300, y: 2650, s: 0.42},
-  {f: 350, x: 2300, y: 3360, s: 1},
-  {f: 386, x: 2300, y: 3360, s: 1.08},
-  {f: 398, x: 1500, y: 2900, s: 0.6, rx: 10},
-  {f: 412, x: 540, y: 2420, s: 0.9},
-  {f: 450, x: 540, y: 2440, s: 0.95},
-];
 
 // ---------- Tatuagem fina (coordenadas locais do cartão 820x1000) ----------
 const CARD = {x: 130, y: 2000, w: 820, h: 1000};
@@ -166,7 +147,7 @@ const SkinCard: React.FC = () => {
         borderRadius: 56,
         overflow: 'hidden',
         opacity: inS,
-        transform: `scale(${0.9 + 0.1 * inS})`,
+        transform: `translateZ(16px) scale(${0.9 + 0.1 * inS})`,
         background:
           'radial-gradient(120% 90% at 30% 20%, #F1D2B8 0%, #E3B999 45%, #C99273 100%)',
         border: `3px solid ${NEON}88`,
@@ -254,41 +235,22 @@ const SkinCard: React.FC = () => {
   );
 };
 
-// ---------- Fundo ----------
-const Background: React.FC<{cx: number; cy: number}> = ({cx, cy}) => (
-  <AbsoluteFill style={{background: `radial-gradient(90% 60% at 50% 45%, #0C2219 0%, ${BG} 70%)`}}>
+// ---------- Fundo (céu atrás do chão) ----------
+const Sky: React.FC = () => (
+  <AbsoluteFill style={{background: `radial-gradient(90% 60% at 50% 40%, #0C2219 0%, ${BG} 70%)`}}>
     <div
       style={{
         position: 'absolute',
         width: 900,
         height: 900,
-        left: 420 - cx * 0.06,
-        top: 300 - cy * 0.04,
+        left: 90,
+        top: 160,
         transform: 'rotate(45deg)',
         borderRadius: 120,
-        background: 'rgba(124,255,79,0.06)',
-        filter: 'blur(70px)',
+        background: 'rgba(124,255,79,0.05)',
+        filter: 'blur(80px)',
       }}
     />
-    {Array.from({length: 70}).map((_, i) => {
-      const x = (((random(`dx${i}`) * 2400 - cx * 0.5) % 1200) + 1200) % 1200 - 60;
-      const y = (((random(`dy${i}`) * 4000 - cy * 0.5) % 2040) + 2040) % 2040 - 60;
-      return (
-        <div
-          key={i}
-          style={{
-            position: 'absolute',
-            left: x,
-            top: y,
-            width: 3 + random(`ds${i}`) * 4,
-            height: 3 + random(`ds${i}`) * 4,
-            borderRadius: 9,
-            background: NEON,
-            opacity: 0.12 + random(`do${i}`) * 0.25,
-          }}
-        />
-      );
-    })}
   </AbsoluteFill>
 );
 
@@ -299,7 +261,6 @@ const Burst: React.FC = () => {
   const t = ci(f, [0, 24], [0, 1], (x) => x * x);
   return (
     <svg width={W} height={H} style={{position: 'absolute', inset: 0}}>
-      <GlowDefs />
       {Array.from({length: 60}).map((_, i) => {
         const a = i * 2.39996;
         const base = 260 + random(`b${i}`) * 900;
@@ -336,16 +297,17 @@ const txt = (size: number, weight = 900, extra: React.CSSProperties = {}): React
   ...extra,
 });
 
-const Words: React.FC<{words: {t: string; c?: string}[]; start: number; step?: number; style: React.CSSProperties}> = ({
+const Words: React.FC<{words: {t: string; c?: string}[]; start: number; step?: number; style: React.CSSProperties; opacity?: number}> = ({
   words,
   start,
   step = 3,
   style,
+  opacity = 1,
 }) => {
   const f = useCurrentFrame();
   const {fps} = useVideoConfig();
   return (
-    <div style={{display: 'flex', gap: '0.28em', justifyContent: 'center', ...style}}>
+    <div style={{display: 'flex', gap: '0.28em', justifyContent: 'center', opacity, ...style}}>
       {words.map((w, i) => {
         const s = spring({frame: f - start - i * step, fps, config: {damping: 15, stiffness: 160}});
         return (
@@ -367,135 +329,300 @@ const Words: React.FC<{words: {t: string; c?: string}[]; start: number; step?: n
   );
 };
 
+const clipLeft = (p: number) => `inset(-30% ${100 - p * 100}% -30% 0)`;
+const clipCenter = (p: number) => `inset(-30% ${50 - p * 50}% -30% ${50 - p * 50}%)`;
+
+// ---------- Cartão de vidro de pé, com espessura ----------
+const Monolith: React.FC<{
+  x: number;
+  y: number;
+  color: string;
+  at: number;
+  title: string;
+  body: string[];
+  icon: string;
+}> = ({x, y, color, at, title, body, icon}) => {
+  const f = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const rise = spring({frame: f - at, fps, config: {damping: 14, stiffness: 90}});
+  const pop = spring({frame: f - at - 8, fps, config: {damping: 11, stiffness: 150}});
+  const out = ci(f, [336, 348], [1, 0]);
+  const w = 640;
+  const h = 760;
+  return (
+    <>
+      <FloorShadow x={x} y={y + 10} w={w * 1.1} o={0.7 * rise * out} />
+      <Stand x={x} y={y} w={w} h={h} rise={rise}>
+        {[28, 21, 14, 7].map((z) => (
+          <div
+            key={z}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              borderRadius: 48,
+              border: `3px solid ${color}`,
+              background: 'rgba(8,16,13,0.85)',
+              opacity: 0.35 * out,
+              transform: `translateZ(${-z}px)`,
+            }}
+          />
+        ))}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: 48,
+            border: `3px solid ${color}`,
+            background: 'linear-gradient(160deg, rgba(255,255,255,0.12), rgba(255,255,255,0.03) 45%, rgba(255,255,255,0.06))',
+            boxShadow: `0 0 60px ${color}50, inset 0 1px 0 rgba(255,255,255,0.3)`,
+            opacity: out,
+          }}
+        >
+          <div style={{position: 'absolute', top: 430, left: 0, right: 0, textAlign: 'center'}}>
+            <div style={txt(64, 900, {letterSpacing: 1})}>{title}</div>
+            <div style={{height: 30}} />
+            {body.map((b, k) => (
+              <div key={k} style={txt(36, 500, {color: '#B9C7C1', lineHeight: 1.45})}>
+                {b}
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* ícone a flutuar à frente do vidro (paralaxe real) */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 60,
+            left: 0,
+            right: 0,
+            display: 'flex',
+            justifyContent: 'center',
+            opacity: out,
+            transform: `translateZ(${40 + 70 * pop}px) scale(${pop})`,
+          }}
+        >
+          <Icon kind={icon} color={color} f={f - at} />
+        </div>
+      </Stand>
+    </>
+  );
+};
+
+// ---------- Câmara de drone (frames da linha original de 450) ----------
+const CAM3: Cam3Key[] = [
+  {f: 0, x: 540, y: 1080, d: 5200, tilt: 0, spin: -40},
+  {f: 30, x: 540, y: 1080, z: 40, d: 1900, tilt: 30, spin: -20},
+  {f: 56, x: 540, y: 1100, z: 160, d: 1500, tilt: 68, spin: -8},
+  {f: 86, x: 540, y: 1120, z: 170, d: 1450, tilt: 80, spin: 6},
+  {f: 104, x: 780, y: 1600, d: 1700, tilt: 62, spin: 35, roll: -6},
+  {f: 122, x: 540, y: 2400, d: 1600, tilt: 28, spin: 12},
+  {f: 165, x: 540, y: 2500, d: 1400, tilt: 10, spin: 0},
+  {f: 184, x: 540, y: 2300, z: 120, d: 2050, tilt: 42, spin: -14},
+  {f: 238, x: 540, y: 2350, z: 120, d: 1900, tilt: 36, spin: 12},
+  {f: 260, x: 1500, y: 2560, z: 380, d: 1350, tilt: 84, spin: -24, roll: 3},
+  {f: 268, x: 1530, y: 2560, z: 380, d: 1300, tilt: 85, spin: -17},
+  {f: 284, x: 2300, y: 2560, z: 380, d: 1350, tilt: 84, spin: -24, roll: 3},
+  {f: 292, x: 2330, y: 2560, z: 380, d: 1300, tilt: 85, spin: -17},
+  {f: 308, x: 3100, y: 2560, z: 380, d: 1350, tilt: 84, spin: -24, roll: 3},
+  {f: 314, x: 3120, y: 2560, z: 380, d: 1300, tilt: 85, spin: -17},
+  {f: 330, x: 2300, y: 2800, z: 200, d: 4600, tilt: 58, spin: 30},
+  {f: 350, x: 2300, y: 3440, z: 100, d: 1550, tilt: 78, spin: -30},
+  {f: 386, x: 2300, y: 3440, z: 100, d: 1450, tilt: 82, spin: 14},
+  {f: 398, x: 1500, y: 2900, z: 300, d: 3600, tilt: 45, spin: 80, roll: 8},
+  {f: 412, x: 540, y: 2500, d: 1500, tilt: 20, spin: 10},
+  {f: 436, x: 540, y: 2480, d: 1450, tilt: 12, spin: 0},
+  {f: 450, x: 540, y: 2540, z: 60, d: 1950, tilt: 42, spin: -16},
+];
+
 const Scenes: React.FC = () => {
   const f = useCurrentFrame();
   const {fps} = useVideoConfig();
-  const cam = cameraAt(f, CAM);
-  const headP = ci(f, [30, 54], [0, 1]);
+  const cam = cam3At(f, CAM3);
+  const hookRise = ci(f, [28, 52], [0, 1], expoOut);
+  const subRise = ci(f, [52, 64], [0, 1], expoOut);
   const hookOut = ci(f, [92, 104], [1, 0]);
   const healOut = ci(f, [240, 252], [1, 0]);
+  const reRise = ci(f, [344, 362], [0, 1], expoOut);
   const reP = ci(f, [348, 366], [0, 1], expoOut);
   const reOut = ci(f, [394, 404], [1, 0]);
   const dot = {
     x: ci(f, [24, 30], [540, 120], expoOut),
-    y: ci(f, [24, 30], [960, 1080], expoOut),
+    y: ci(f, [24, 30], [1080, 1080], expoOut),
   };
-  const iconPop = (t: number) => spring({frame: f - t, fps, config: {damping: 11, stiffness: 150}});
+  const pop = (t: number) => spring({frame: f - t, fps, config: {damping: 11, stiffness: 150}});
+  const fog = ci(cam.tilt, [50, 85], [0, 1]);
 
   const cards = [
-    {x: 1500, c: CYAN, at: 252, title: 'AGULHA FINA', body: ['Uma só ponta:', 'o traço é delicado.'], icon: 'needle'},
-    {x: 2300, c: PURPLE, at: 276, title: 'MENOS TINTA', body: ['Entra menos pigmento', 'em cada passagem.'], icon: 'drop'},
-    {x: 3100, c: AMBER, at: 300, title: 'CICATRIZAÇÃO', body: ['A pele expulsa parte', 'do pigmento.'], icon: 'skin'},
+    {x: 1500, c: CYAN, at: 250, title: 'AGULHA FINA', body: ['Uma só ponta:', 'o traço é delicado.'], icon: 'needle'},
+    {x: 2300, c: PURPLE, at: 274, title: 'MENOS TINTA', body: ['Entra menos pigmento', 'em cada passagem.'], icon: 'drop'},
+    {x: 3100, c: AMBER, at: 298, title: 'CICATRIZAÇÃO', body: ['A pele expulsa parte', 'do pigmento.'], icon: 'skin'},
   ];
 
   return (
     <AbsoluteFill>
-      <Background cx={cam.x} cy={cam.y} />
-      <AbsoluteFill style={{perspective: 1600, perspectiveOrigin: '50% 50%'}}>
-        <AbsoluteFill style={{transform: `rotateX(${cam.rx}deg) rotateY(${cam.ry}deg)`, transformStyle: 'preserve-3d'}}>
-          <div
-            style={{
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              width: 4000,
-              height: 4000,
-              transformOrigin: '0 0',
-              transform: `translate(${W / 2 - cam.x * cam.s}px, ${H / 2 - cam.y * cam.s}px) scale(${cam.s})`,
-            }}
-          >
-            {/* 1. Gancho */}
-            {f < 106 ? (
-              <div style={{position: 'absolute', left: 40, width: 1000, top: 790, opacity: hookOut, filter: `blur(${(1 - hookOut) * 14}px)`, textAlign: 'center'}}>
-                <Reveal p={ci(f, [30, 46], [0, 1])}>
-                  <div style={txt(44, 800, {color: NEON, letterSpacing: 14})}>TATUAGEM DE</div>
-                </Reveal>
-                <div style={{height: 26}} />
-                <Reveal p={headP}>
-                  <div style={txt(150, 900, {letterSpacing: -3})}>TRAÇO FINO</div>
-                </Reveal>
-                <div style={{height: 104}} />
+      <Sky />
+      <AbsoluteFill style={{perspective: PERSPECTIVE, perspectiveOrigin: '50% 50%'}}>
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: 4000,
+            height: 4000,
+            transformOrigin: '0 0',
+            transformStyle: 'preserve-3d',
+            transform: worldTransform(cam, W, H),
+          }}
+        >
+          <Floor cam={cam} />
+
+          {/* 2-3. Pele, desenho e cicatrização (pele deitada no chão, com espessura) */}
+          {f > 96 ? (
+            <>
+              <FloorShadow x={540} y={3010} w={900} o={0.5} />
+              {[4, 8, 12].map((z) => (
+                <div
+                  key={z}
+                  style={{
+                    position: 'absolute',
+                    left: CARD.x,
+                    top: CARD.y,
+                    width: CARD.w,
+                    height: CARD.h,
+                    borderRadius: 56,
+                    background: '#8E5C43',
+                    opacity: ci(f, [100, 112], [0, 1]),
+                    transform: `translateZ(${z}px)`,
+                  }}
+                />
+              ))}
+              <SkinCard />
+            </>
+          ) : null}
+          {f > 96 && f < 252 ? (
+            <div
+              style={{
+                position: 'absolute',
+                left: 0,
+                width: 1080,
+                top: 3060,
+                transform: 'translateZ(2px)',
+              }}
+            >
+              <Words start={190} words={[{t: 'A'}, {t: 'pele'}, {t: 'cicatriza…'}]} style={txt(58, 800)} opacity={healOut} />
+              <div style={{height: 18}} />
+              <Words start={204} words={[{t: 'e'}, {t: 'o'}, {t: 'traço'}, {t: 'fino'}, {t: 'falha.', c: RED}]} style={txt(58, 800)} opacity={healOut} />
+            </div>
+          ) : null}
+
+          {/* Linha-guia: trilho néon no chão */}
+          <svg width={4000} height={4000} style={{position: 'absolute', inset: 0, overflow: 'visible', transform: 'translateZ(1px)'}}>
+            <GlowDefs />
+            {f >= 20 && f < 31 ? <NeedleHead x={dot.x} y={dot.y} r={10} /> : null}
+            <GuideSeg d="M120 1080 L960 1080" from={30} to={54} fadeAt={98} />
+            <GuideSeg d="M960 1080 C 1100 1080, 1080 1350, 820 1550 S 420 1900, 540 2170" from={86} to={118} fadeAt={124} easing={easeInOut} />
+            <GuideSeg d="M950 2500 C 1150 2500, 1250 2580, 1500 2580" from={240} to={260} fadeAt={340} easing={easeInOut} />
+            <GuideSeg d="M1500 2580 L 2300 2580" from={264} to={284} fadeAt={340} easing={easeInOut} />
+            <GuideSeg d="M2300 2580 L 3100 2580" from={288} to={308} fadeAt={340} easing={easeInOut} />
+            <GuideSeg d="M1500 2580 C 1500 3000, 2300 3000, 2300 3440" from={326} to={346} fadeAt={350} fadeDur={8} easing={easeInOut} />
+            <GuideSeg d="M2300 2580 L 2300 3440" from={328} to={346} fadeAt={350} fadeDur={8} easing={easeInOut} />
+            <GuideSeg d="M3100 2580 C 3100 3000, 2300 3000, 2300 3440" from={326} to={346} fadeAt={350} fadeDur={8} easing={easeInOut} />
+            <GuideSeg d="M2300 3440 L 1880 3440" from={346} to={362} fadeAt={396} easing={expoOut} />
+            <GuideSeg d="M2300 3440 L 2720 3440" from={346} to={362} fadeAt={396} easing={expoOut} />
+            <defs>
+              <linearGradient id="multi" gradientUnits="userSpaceOnUse" x1={1880} y1={0} x2={2720} y2={0}>
+                <stop offset="0" stopColor={CYAN} />
+                <stop offset="0.5" stopColor={PURPLE} />
+                <stop offset="1" stopColor={AMBER} />
+              </linearGradient>
+            </defs>
+            <path d="M1880 3440 L2720 3440" stroke="url(#multi)" strokeWidth={6} strokeLinecap="round" opacity={ci(f, [366, 380], [0, 1]) * ci(f, [394, 400], [1, 0])} />
+            <GuideSeg d="M2720 3440 C 3000 3440, 2600 2600, 1600 2300 S 700 2120, 540 2170" from={384} to={410} fadeAt={414} easing={easeInOut} />
+          </svg>
+
+          {/* 1. Gancho: o título levanta-se do chão sobre a linha */}
+          {f < 106 ? (
+            <>
+              <FloorShadow x={540} y={1090} w={1000} o={0.5 * hookRise * hookOut} />
+              <Stand x={540} y={1076} w={1040} h={300} rise={hookRise}>
+                <div style={{position: 'absolute', top: 0, left: 0, right: 0, textAlign: 'center', transformStyle: 'preserve-3d'}}>
+                  <div style={{...txt(44, 800, {color: NEON, letterSpacing: 14}), clipPath: clipLeft(ci(f, [30, 46], [0, 1])), opacity: hookOut}}>TATUAGEM DE</div>
+                </div>
+                <div style={{position: 'absolute', top: 100, left: 0, right: 0, textAlign: 'center', transformStyle: 'preserve-3d'}}>
+                  <Extrude text="TRAÇO FINO" style={txt(160, 900, {letterSpacing: -3})} depth={16} clip={clipLeft(ci(f, [30, 54], [0, 1]))} opacity={hookOut} />
+                </div>
+              </Stand>
+              <Stand x={540} y={1200} w={1040} h={70} rise={subRise}>
                 <Words
                   start={56}
                   words={[{t: 'quase'}, {t: 'sempre'}, {t: 'precisa'}, {t: 'de'}, {t: 'retoque', c: NEON}]}
-                  style={txt(54, 700, {color: '#E8F3EE'})}
+                  style={txt(56, 700, {color: '#E8F3EE'})}
+                  opacity={hookOut}
                 />
-              </div>
-            ) : null}
+              </Stand>
+            </>
+          ) : null}
 
-            {/* 2-3. Pele, desenho e cicatrização */}
-            {f > 96 && f < 252 ? (
-              <div style={{opacity: healOut}}>
-                <div style={{position: 'absolute', left: 0, width: 1080, top: 1610, textAlign: 'center', opacity: ci(f, [168, 176], [0, 1])}}>
+          {/* Contador de pé atrás da pele */}
+          {f > 160 && f < 252 ? (
+            <>
+              <FloorShadow x={540} y={1905} w={760} o={0.5 * healOut} />
+              <Stand x={540} y={1900} w={900} h={300} rise={ci(f, [164, 178], [0, 1], expoOut)}>
+                <div style={{position: 'absolute', top: 0, left: 0, right: 0, textAlign: 'center', opacity: healOut}}>
                   <div style={txt(34, 800, {color: AMBER, letterSpacing: 10})}>CICATRIZAÇÃO</div>
                 </div>
-                <div style={{position: 'absolute', left: 300, top: 1690, opacity: ci(f, [166, 172], [0, 1]), transform: `scale(${0.8 + 0.2 * iconPop(166)})`}}>
+                <div style={{position: 'absolute', left: 150, top: 80, opacity: healOut}}>
                   <Odometer times={[166, 184, 199, 214, 228]} values={[1, 7, 14, 21, 30]} digits={2} />
                 </div>
-                <div style={{position: 'absolute', left: 630, top: 1740, opacity: ci(f, [170, 178], [0, 1])}}>
-                  <div style={txt(100, 900, {color: AMBER})}>DIAS</div>
+                <div style={{position: 'absolute', left: 480, top: 128, transformStyle: 'preserve-3d'}}>
+                  <Extrude text="DIAS" style={txt(100, 900, {color: AMBER})} side="#6B4210" depth={10} opacity={healOut} />
                 </div>
-                <div style={{position: 'absolute', left: 0, width: 1080, top: 3060}}>
-                  <Words start={190} words={[{t: 'A'}, {t: 'pele'}, {t: 'cicatriza…'}]} style={txt(58, 800)} />
-                  <div style={{height: 18}} />
-                  <Words start={204} words={[{t: 'e'}, {t: 'o'}, {t: 'traço'}, {t: 'fino'}, {t: 'falha.', c: RED}]} style={txt(58, 800)} />
+              </Stand>
+            </>
+          ) : null}
+
+          {/* 4. Porquê: monólitos de vidro que se levantam do chão */}
+          {f > 240 && f < 352 ? cards.map((c, i) => <Monolith key={i} x={c.x} y={2500} color={c.c} at={c.at} title={c.title} body={c.body} icon={c.icon} />) : null}
+
+          {/* 5. Título do retoque */}
+          {f > 340 && f < 406 ? (
+            <>
+              <FloorShadow x={2300} y={3450} w={1200} o={0.5 * reRise * reOut} />
+              <Stand x={2300} y={3436} w={1600} h={170} rise={reRise}>
+                <div style={{position: 'absolute', top: 10, left: 0, right: 0, textAlign: 'center', transformStyle: 'preserve-3d'}}>
+                  <Extrude text="O RETOQUE." style={txt(150, 900, {letterSpacing: -2})} depth={16} clip={clipCenter(reP)} opacity={reOut} />
                 </div>
-              </div>
-            ) : null}
-            {f > 96 ? <SkinCard /> : null}
+              </Stand>
+              <Stand x={2300} y={3540} w={1400} h={60} rise={ci(f, [358, 370], [0, 1], expoOut)}>
+                <div style={{textAlign: 'center', ...txt(46, 800, {letterSpacing: 8, color: '#E8F3EE'}), clipPath: clipLeft(ci(f, [360, 378], [0, 1])), opacity: reOut}}>
+                  FAZ PARTE DO PROCESSO.
+                </div>
+              </Stand>
+            </>
+          ) : null}
 
-            {/* 4. Porquê: carrossel de cartões de vidro */}
-            {f > 240 && f < 352
-              ? cards.map((c, i) => (
-                  <GlassCard key={i} x={c.x} y={2500} w={640} h={760} border={c.c} appear={c.at}>
-                    <div style={{position: 'absolute', top: 70, left: 0, right: 0, display: 'flex', justifyContent: 'center', transform: `scale(${iconPop(c.at + 6)})`}}>
-                      <Icon kind={c.icon} color={c.c} f={f - c.at} />
-                    </div>
-                    <div style={{position: 'absolute', top: 430, left: 0, right: 0, textAlign: 'center'}}>
-                      <div style={txt(64, 900, {letterSpacing: 1})}>{c.title}</div>
-                      <div style={{height: 30}} />
-                      {c.body.map((b, k) => (
-                        <div key={k} style={txt(36, 500, {color: '#B9C7C1', lineHeight: 1.45})}>
-                          {b}
-                        </div>
-                      ))}
-                    </div>
-                  </GlassCard>
-                ))
-              : null}
-
-            {/* 5. Título do retoque */}
-            {f > 344 && f < 406 ? (
-              <div style={{position: 'absolute', left: 1300, width: 2000, top: 3245, textAlign: 'center', opacity: reOut, filter: `blur(${(1 - reOut) * 12}px)`}}>
-                <Reveal p={reP} fromCenter>
-                  <div style={txt(136, 900, {letterSpacing: -2})}>O RETOQUE.</div>
-                </Reveal>
-                <div style={{height: 64}} />
-                <Reveal p={ci(f, [360, 378], [0, 1])}>
-                  <div style={txt(46, 800, {letterSpacing: 8, color: '#E8F3EE'})}>FAZ PARTE DO PROCESSO.</div>
-                </Reveal>
-              </div>
-            ) : null}
-
-            {/* 6. Fecho */}
-            {f > 414 ? (
-              <>
-                <div style={{position: 'absolute', left: 0, width: 1080, top: 1770, display: 'flex', justifyContent: 'center'}}>
+          {/* 6. Fecho */}
+          {f > 414 ? (
+            <>
+              <Stand x={540} y={1930} w={900} h={110} rise={pop(416)}>
+                <div style={{display: 'flex', justifyContent: 'center'}}>
                   <div
                     style={{
                       ...txt(40, 800, {color: NEON, letterSpacing: 8}),
                       padding: '22px 40px',
                       border: `3px solid ${NEON}`,
                       borderRadius: 60,
+                      background: 'rgba(7,19,14,0.8)',
                       boxShadow: `0 0 40px ${NEON}55`,
-                      opacity: iconPop(416),
-                      transform: `translateY(${(1 - iconPop(416)) * 40}px)`,
                     }}
                   >
                     DEPOIS DO RETOQUE
                   </div>
                 </div>
-                <div style={{position: 'absolute', left: 0, width: 1080, top: 3070, display: 'flex', justifyContent: 'center'}}>
+              </Stand>
+              <FloorShadow x={540} y={3115} w={700} o={0.5 * pop(436)} />
+              <Stand x={540} y={3110} w={900} h={130} rise={ci(f, [434, 444], [0, 1], expoOut)}>
+                <div style={{display: 'flex', justifyContent: 'center'}}>
                   <div
                     style={{
                       ...txt(56, 900, {color: '#07130E', letterSpacing: 2}),
@@ -503,43 +630,22 @@ const Scenes: React.FC = () => {
                       padding: '26px 52px',
                       borderRadius: 70,
                       boxShadow: `0 0 80px ${NEON}88`,
-                      transform: `scale(${spring({frame: f - 436, fps, config: {damping: 9, stiffness: 200}}) * 1}) rotate(-3deg)`,
+                      transform: `scale(${spring({frame: f - 436, fps, config: {damping: 9, stiffness: 200}})}) rotate(-3deg)`,
                     }}
                   >
                     ✓ TRAÇO COMPLETO
                   </div>
                 </div>
-              </>
-            ) : null}
+              </Stand>
+            </>
+          ) : null}
 
-            {/* Linha-guia (camada única por cima de tudo) */}
-            <svg width={4000} height={4000} style={{position: 'absolute', inset: 0, overflow: 'visible'}}>
-              <GlowDefs />
-              {f >= 20 && f < 31 ? <NeedleHead x={dot.x} y={dot.y} r={10} /> : null}
-              <GuideSeg d="M120 1080 L960 1080" from={30} to={54} fadeAt={98} />
-              <GuideSeg d="M960 1080 C 1100 1080, 1080 1350, 820 1550 S 420 1900, 540 2170" from={86} to={118} fadeAt={124} easing={easeInOut} />
-              <GuideSeg d="M950 2300 C 1150 2300, 1200 2040, 1500 2040 L 1500 2120" from={240} to={260} fadeAt={340} easing={easeInOut} />
-              <GuideSeg d="M1500 2040 L 2300 2040 L 2300 2120" from={264} to={284} fadeAt={340} easing={easeInOut} />
-              <GuideSeg d="M2300 2040 L 3100 2040 L 3100 2120" from={288} to={308} fadeAt={340} easing={easeInOut} />
-              <GuideSeg d="M1500 2880 C 1500 3200, 2300 3150, 2300 3440" from={326} to={346} fadeAt={345} fadeDur={6} easing={easeInOut} />
-              <GuideSeg d="M2300 2880 L 2300 3440" from={328} to={346} fadeAt={345} fadeDur={6} easing={easeInOut} />
-              <GuideSeg d="M3100 2880 C 3100 3200, 2300 3150, 2300 3440" from={326} to={346} fadeAt={345} fadeDur={6} easing={easeInOut} />
-              <GuideSeg d="M2300 3440 L 1880 3440" from={346} to={362} fadeAt={396} easing={expoOut} />
-              <GuideSeg d="M2300 3440 L 2720 3440" from={346} to={362} fadeAt={396} easing={expoOut} />
-              <defs>
-                <linearGradient id="multi" gradientUnits="userSpaceOnUse" x1={1880} y1={0} x2={2720} y2={0}>
-                  <stop offset="0" stopColor={CYAN} />
-                  <stop offset="0.5" stopColor={PURPLE} />
-                  <stop offset="1" stopColor={AMBER} />
-                </linearGradient>
-              </defs>
-              <path d="M1880 3440 L2720 3440" stroke="url(#multi)" strokeWidth={6} strokeLinecap="round" opacity={ci(f, [366, 380], [0, 1]) * ci(f, [394, 400], [1, 0])} />
-              <GuideSeg d="M2720 3440 C 3000 3440, 2600 2600, 1600 2300 S 700 2120, 540 2170" from={384} to={410} fadeAt={414} easing={easeInOut} />
-            </svg>
-          </div>
-        </AbsoluteFill>
+          <Particles cam={cam} area={[-800, 200, 4400, 4200]} />
+        </div>
       </AbsoluteFill>
       <Burst />
+      {/* névoa no horizonte quando a câmara está rasante */}
+      <AbsoluteFill style={{background: `linear-gradient(180deg, ${BG} 0%, rgba(4,11,9,0.6) 18%, transparent 40%)`, opacity: fog}} />
       <AbsoluteFill style={{background: 'radial-gradient(75% 60% at 50% 50%, transparent 55%, rgba(0,0,0,0.75) 100%)'}} />
       <AbsoluteFill style={{background: '#000', opacity: ci(f, [0, 2], [1, 0])}} />
     </AbsoluteFill>

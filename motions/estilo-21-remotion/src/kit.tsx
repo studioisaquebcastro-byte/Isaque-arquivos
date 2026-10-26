@@ -219,3 +219,162 @@ export const Reveal: React.FC<{p: number; children: React.ReactNode; fromCenter?
     : `inset(-20% ${100 - p * 100}% -20% 0)`;
   return <div style={{clipPath: clip}}>{children}</div>;
 };
+
+// ---------- Espaço 3D (chão + câmara de drone) ----------
+// O mundo é um chão (plano XY em px). A câmara orbita um alvo: d = distância, tilt = 0 vista de cima
+// e 90 rasante, spin = rotação à volta do eixo vertical, roll = inclinação do horizonte.
+export const PERSPECTIVE = 1400;
+export type Cam3Key = {f: number; x: number; y: number; z?: number; d: number; tilt: number; spin: number; roll?: number};
+export type Cam3 = {x: number; y: number; z: number; d: number; tilt: number; spin: number; roll: number};
+
+export const cam3At = (f: number, keys: Cam3Key[]): Cam3 => {
+  const pick = (k: Cam3Key): Cam3 => ({x: k.x, y: k.y, z: k.z ?? 0, d: k.d, tilt: k.tilt, spin: k.spin, roll: k.roll ?? 0});
+  if (f <= keys[0].f) return pick(keys[0]);
+  for (let i = 0; i < keys.length - 1; i++) {
+    const a = pick(keys[i]);
+    const b = pick(keys[i + 1]);
+    if (f <= keys[i + 1].f) {
+      const t = easeInOut((f - keys[i].f) / (keys[i + 1].f - keys[i].f));
+      const l = (p: keyof Cam3) => a[p] + (b[p] - a[p]) * t;
+      return {x: l('x'), y: l('y'), z: l('z'), d: Math.exp(Math.log(a.d) + (Math.log(b.d) - Math.log(a.d)) * t), tilt: l('tilt'), spin: l('spin'), roll: l('roll')};
+    }
+  }
+  return pick(keys[keys.length - 1]);
+};
+
+export const worldTransform = (c: Cam3, w: number, h: number) =>
+  `translate3d(${w / 2}px, ${h / 2}px, 0) translateZ(${PERSPECTIVE - c.d}px) rotateZ(${c.roll}deg) rotateX(${c.tilt}deg) rotateZ(${c.spin}deg) translate3d(${-c.x}px, ${-c.y}px, ${-c.z}px)`;
+
+// Plano que se levanta do chão a partir da aresta de baixo (rise 0 = deitado, 1 = de pé).
+export const Stand: React.FC<{x: number; y: number; w: number; h: number; rise?: number; z?: number; children: React.ReactNode}> = ({
+  x,
+  y,
+  w,
+  h,
+  rise = 1,
+  z = 0,
+  children,
+}) => (
+  <div
+    style={{
+      position: 'absolute',
+      left: x - w / 2,
+      top: y - h,
+      width: w,
+      height: h,
+      transformOrigin: '50% 100%',
+      transform: `translateZ(${z}px) rotateX(${-90 * rise}deg)`,
+      transformStyle: 'preserve-3d',
+    }}
+  >
+    {children}
+  </div>
+);
+
+// Texto com espessura: camadas recuadas em Z por trás da face.
+export const Extrude: React.FC<{
+  text: string;
+  style: React.CSSProperties;
+  depth?: number;
+  step?: number;
+  side?: string;
+  clip?: string;
+  opacity?: number;
+}> = ({text, style, depth = 12, step = 2.2, side = '#1E5A33', clip, opacity = 1}) => (
+  <div style={{position: 'relative', transformStyle: 'preserve-3d', display: 'inline-block'}}>
+    {Array.from({length: depth}).map((_, i) => (
+      <div
+        key={i}
+        style={{
+          ...style,
+          position: 'absolute',
+          inset: 0,
+          color: side,
+          opacity: opacity * (0.55 + 0.45 * (1 - i / depth)),
+          transform: `translateZ(${-(depth - i) * step}px)`,
+          clipPath: clip,
+        }}
+      >
+        {text}
+      </div>
+    ))}
+    <div style={{...style, position: 'relative', clipPath: clip, opacity, transform: 'translateZ(0.5px)'}}>{text}</div>
+  </div>
+);
+
+// Partículas volumétricas sempre viradas para a câmara.
+export const Particles: React.FC<{cam: Cam3; count?: number; area: [number, number, number, number]}> = ({cam, count = 140, area}) => (
+  <>
+    {Array.from({length: count}).map((_, i) => {
+      const r = (k: string) => {
+        const s = Math.sin((i + 1) * 12.9898 + k.charCodeAt(0) * 78.233) * 43758.5453;
+        return s - Math.floor(s);
+      };
+      const x = area[0] + r('x') * (area[2] - area[0]);
+      const y = area[1] + r('y') * (area[3] - area[1]);
+      const z = 40 + r('z') * 620;
+      const s = 4 + r('s') * 10;
+      return (
+        <div
+          key={i}
+          style={{
+            position: 'absolute',
+            left: x - s / 2,
+            top: y - s / 2,
+            width: s,
+            height: s,
+            borderRadius: '50%',
+            background: `radial-gradient(circle, ${r('c') > 0.75 ? '#ffffff' : NEON} 0%, transparent 70%)`,
+            opacity: 0.25 + r('o') * 0.6,
+            transform: `translateZ(${z}px) rotateZ(${-cam.spin}deg) rotateX(${-cam.tilt}deg)`,
+          }}
+        />
+      );
+    })}
+  </>
+);
+
+export const Floor: React.FC<{cam: Cam3}> = ({cam}) => (
+  <>
+    <div
+      style={{
+        position: 'absolute',
+        left: -1600,
+        top: -1000,
+        width: 7600,
+        height: 6400,
+        backgroundImage:
+          'linear-gradient(rgba(124,255,79,0.10) 2px, transparent 2px), linear-gradient(90deg, rgba(124,255,79,0.10) 2px, transparent 2px)',
+        backgroundSize: '160px 160px',
+        WebkitMaskImage: `radial-gradient(1500px 1500px at ${cam.x + 1600}px ${cam.y + 1000}px, #000 15%, transparent 100%)`,
+        maskImage: `radial-gradient(1500px 1500px at ${cam.x + 1600}px ${cam.y + 1000}px, #000 15%, transparent 100%)`,
+      }}
+    />
+    <div
+      style={{
+        position: 'absolute',
+        left: cam.x - 900,
+        top: cam.y - 900,
+        width: 1800,
+        height: 1800,
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(124,255,79,0.10), transparent 65%)',
+      }}
+    />
+  </>
+);
+
+// Sombra suave no chão por baixo de um objeto de pé.
+export const FloorShadow: React.FC<{x: number; y: number; w: number; o?: number}> = ({x, y, w, o = 0.6}) => (
+  <div
+    style={{
+      position: 'absolute',
+      left: x - w / 2,
+      top: y - 60,
+      width: w,
+      height: 120,
+      borderRadius: '50%',
+      background: `radial-gradient(closest-side, rgba(0,0,0,${o}), transparent)`,
+    }}
+  />
+);
