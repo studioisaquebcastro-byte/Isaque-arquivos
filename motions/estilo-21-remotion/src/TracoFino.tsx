@@ -2,7 +2,6 @@
 // Um só plano: a linha néon é a agulha, que desenha, liga e fecha todas as cenas.
 import React from 'react';
 import {AbsoluteFill, Audio, Freeze, Sequence, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig, random} from 'remotion';
-import {CameraMotionBlur} from '@remotion/motion-blur';
 import {getLength, getPointAtLength} from '@remotion/paths';
 import {
   BG,
@@ -762,9 +761,8 @@ const Sound: React.FC = () => (
 
 export const TracoFino: React.FC = () => (
   <AbsoluteFill style={{background: BG}}>
-    <CameraMotionBlur samples={5} shutterAngle={170}>
-      <Remapped />
-    </CameraMotionBlur>
+    {/* o motion blur é aplicado depois, em ffmpeg (npm run render) */}
+    <Remapped />
     <Sound />
   </AbsoluteFill>
 );

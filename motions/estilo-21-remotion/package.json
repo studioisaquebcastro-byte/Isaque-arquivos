@@ -3,11 +3,10 @@
   "private": true,
   "scripts": {
     "studio": "remotion studio",
-    "render": "remotion render TracoFino out/traco-fino.mp4"
+    "render": "remotion render TracoFino out/raw.mp4 && ffmpeg -y -i out/raw.mp4 -vf \"tmix=frames=3:weights=1 2 1\" -c:v libx264 -crf 18 -pix_fmt yuv420p -c:a copy out/traco-fino.mp4"
   },
   "dependencies": {
     "@remotion/cli": "4.0.539",
-    "@remotion/motion-blur": "4.0.539",
     "@remotion/paths": "4.0.539",
     "react": "18.3.1",
     "react-dom": "18.3.1",
