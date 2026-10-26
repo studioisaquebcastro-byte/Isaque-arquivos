@@ -1,7 +1,7 @@
 // Demo do estilo 21: "Tatuagem de traço fino quase sempre precisa de retoque".
 // Um só plano: a linha néon é a agulha, que desenha, liga e fecha todas as cenas.
 import React from 'react';
-import {AbsoluteFill, Audio, Sequence, spring, staticFile, useCurrentFrame, useVideoConfig, random} from 'remotion';
+import {AbsoluteFill, Audio, Freeze, Sequence, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig, random} from 'remotion';
 import {CameraMotionBlur} from '@remotion/motion-blur';
 import {getLength, getPointAtLength} from '@remotion/paths';
 import {
@@ -595,43 +595,69 @@ const Icon: React.FC<{kind: string; color: string; f: number}> = ({kind, color, 
 };
 
 // ---------- Som ----------
-const S: React.FC<{at: number; src: string; v?: number}> = ({at, src, v = 1}) => (
-  <Sequence from={at} layout="none">
+// ---------- Sincronia com a narração ----------
+// A animação foi desenhada numa linha de 450 frames; estas âncoras (frame original → segundo final)
+// esticam cada bloco para começar na palavra certa da narração (public/narracao-sync.wav).
+const ANCHORS: [number, number][] = [
+  [0, 0], [30, 0.8], [54, 2.5], [56, 2.85], [86, 5.2], [118, 6.1], [165, 7.7], [166, 8.5],
+  [214, 10.1], [240, 10.7], [262, 11.45], [280, 12.45], [292, 13.4], [304, 13.9], [314, 15.0],
+  [330, 16.2], [346, 17.1], [348, 17.2], [380, 19.0], [386, 19.4], [410, 20.3], [436, 21.2], [450, 22.2],
+];
+export const FPS = 30;
+export const DURATION = Math.round(ANCHORS[ANCHORS.length - 1][1] * FPS);
+const ORIG = ANCHORS.map((a) => a[0]);
+const NEW = ANCHORS.map((a) => a[1] * FPS);
+const toNew = (f: number) => interpolate(f, ORIG, NEW, {extrapolateRight: 'clamp'});
+const toOrig = (f: number) => interpolate(f, NEW, ORIG, {extrapolateRight: 'clamp'});
+
+const Remapped: React.FC = () => {
+  const f = useCurrentFrame();
+  return (
+    <Freeze frame={toOrig(f)}>
+      <Scenes />
+    </Freeze>
+  );
+};
+
+// ---------- Som ----------
+const S: React.FC<{at: number; src: string; v?: number; len?: number}> = ({at, src, v = 1, len}) => (
+  <Sequence from={Math.round(toNew(at))} durationInFrames={len} layout="none">
     <Audio src={staticFile(`sfx/${src}.wav`)} volume={v} />
   </Sequence>
 );
 
 const Sound: React.FC = () => (
   <>
-    <Audio src={staticFile('sfx/bed.wav')} volume={0.8} />
-    <S at={0} src="suck" v={0.8} />
-    <S at={24} src="pop" />
-    <S at={30} src="whoosh" v={0.5} />
-    <S at={86} src="whoosh" />
-    <S at={118} src="buzz" v={0.7} />
+    <Audio src={staticFile('narracao-sync.wav')} volume={1} />
+    <Audio src={staticFile('sfx/bed.wav')} volume={0.45} loop />
+    <S at={0} src="suck" v={0.6} />
+    <S at={24} src="pop" v={0.7} />
+    <S at={30} src="whoosh" v={0.3} />
+    <S at={86} src="whoosh" v={0.6} />
+    <S at={118} src="buzz" v={0.35} len={48} />
     {[166, 184, 199, 214, 228].map((t) => (
-      <S key={t} at={t} src="tick" />
+      <S key={t} at={t} src="tick" v={0.6} />
     ))}
     {[214, 221, 228].map((t) => (
-      <S key={t} at={t} src="ping" />
+      <S key={t} at={t} src="ping" v={0.6} />
     ))}
-    <S at={240} src="whoosh" v={0.8} />
-    <S at={262} src="whoosh" v={0.6} />
-    <S at={284} src="whoosh" v={0.6} />
-    <S at={306} src="whoosh" v={0.6} />
-    <S at={322} src="whoosh" />
-    <S at={346} src="impact" v={0.8} />
-    <S at={384} src="whoosh" />
-    <S at={410} src="buzz" v={0.6} />
-    <S at={436} src="impact" v={0.6} />
-    <S at={437} src="ding" />
+    <S at={240} src="whoosh" v={0.5} />
+    <S at={262} src="whoosh" v={0.35} />
+    <S at={280} src="whoosh" v={0.35} />
+    <S at={304} src="whoosh" v={0.35} />
+    <S at={320} src="whoosh" v={0.6} />
+    <S at={346} src="impact" v={0.6} />
+    <S at={384} src="whoosh" v={0.6} />
+    <S at={410} src="buzz" v={0.3} len={27} />
+    <S at={436} src="impact" v={0.5} />
+    <S at={437} src="ding" v={0.7} />
   </>
 );
 
 export const TracoFino: React.FC = () => (
   <AbsoluteFill style={{background: BG}}>
     <CameraMotionBlur samples={6} shutterAngle={170}>
-      <Scenes />
+      <Remapped />
     </CameraMotionBlur>
     <Sound />
   </AbsoluteFill>
